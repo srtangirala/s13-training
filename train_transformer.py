@@ -24,16 +24,16 @@ logging.basicConfig(
     ]
 )
 
-# Adjust hyperparameters for better memory usage
-BATCH_SIZE = 32          # Reduced from 64
-BLOCK_SIZE = 256        
-N_EMBD = 384           # Reduced from 512
-N_HEAD = 8
-N_LAYER = 6            # Reduced from 8
+# Adjust hyperparameters for larger model
+BATCH_SIZE = 32          
+BLOCK_SIZE = 1024        # Increased from 256
+N_EMBD = 768            # Increased from 384
+N_HEAD = 12             # Increased from 8
+N_LAYER = 12            # Increased from 6
 LEARNING_RATE = 3e-4
-WARMUP_STEPS = 1000
+WARMUP_STEPS = 2000     # Increased for larger model
 MAX_ITERS = 10000
-EVAL_INTERVAL = 100    # More frequent evaluation
+EVAL_INTERVAL = 100    
 DROPOUT = 0.2
 GRADIENT_CLIP = 1.0
 WEIGHT_DECAY = 0.1
@@ -198,14 +198,8 @@ def main():
     chars = sorted(list(set(text)))
     vocab_size = len(chars)
     
-    # Create character-level encoder/decoder
-    stoi = {ch:i for i,ch in enumerate(chars)}
-    itos = {i:ch for i,ch in enumerate(chars)}
-    encode = lambda s: [stoi[c] for c in s]
-    decode = lambda l: ''.join([itos[i] for i in l])
-
-    # Create train/val splits
-    data = torch.tensor(encode(text), dtype=torch.long)
+    # Remove the local lambda functions and use the global encode/decode functions
+    data = torch.tensor(encode(text, stoi), dtype=torch.long)
     n = int(0.9*len(data))
     train_data = data[:n]
     val_data = data[n:]
@@ -231,7 +225,21 @@ def main():
     
     model = DecoderTransformer(vocab_size)
     model = model.to(device)
-    logging.info(f"Model device: {next(model.parameters()).device}")  # Verify model device
+    
+    # Calculate and display total parameters
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+    print(f"Training config:")
+    print(f"- Total parameters: {total_params:,}")
+    print(f"- Trainable parameters: {trainable_params:,}")
+    print(f"- Batch size: {BATCH_SIZE}")
+    print(f"- Block size: {BLOCK_SIZE}")
+    print(f"- Embedding dim: {N_EMBD}")
+    print(f"- Heads: {N_HEAD}")
+    print(f"- Layers: {N_LAYER}")
+    print(f"- Max iterations: {MAX_ITERS}")
+    print("Starting training...\n")
 
     # Initialize optimizer with weight decay
     optimizer = torch.optim.AdamW(
@@ -243,15 +251,6 @@ def main():
     
     # Initialize scheduler
     scheduler = WarmupCosineScheduler(optimizer, WARMUP_STEPS, MAX_ITERS)
-
-    print(f"Training config:")
-    print(f"- Batch size: {BATCH_SIZE}")
-    print(f"- Block size: {BLOCK_SIZE}")
-    print(f"- Embedding dim: {N_EMBD}")
-    print(f"- Heads: {N_HEAD}")
-    print(f"- Layers: {N_LAYER}")
-    print(f"- Max iterations: {MAX_ITERS}")
-    print("Starting training...\n")
 
     # Training loop
     best_val_loss = float('inf')
@@ -304,7 +303,8 @@ def main():
         if iter % 1000 == 0 and iter > 0:
             print("\nGenerating sample text...")
             context = torch.zeros((1, 1), dtype=torch.long, device=device)
-            print(decode(model.generate(context, max_new_tokens=100)[0].tolist(), itos))
+            generated_tokens = model.generate(context, max_new_tokens=100)[0].tolist()
+            print(decode(generated_tokens, itos))
             print("\n" + "="*50 + "\n")
 
     # Save final model
