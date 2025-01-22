@@ -10,10 +10,9 @@ import logging
 import os
 import time
 
-# Set MPS memory management settings
-os.environ['PYTORCH_MPS_HIGH_WATERMARK_RATIO'] = '0.0'  # Disable upper limit
-# Optional: Set garbage collection to be more aggressive
-torch.mps.empty_cache()
+# Remove MPS-specific settings and replace with CUDA empty cache
+import torch
+torch.cuda.empty_cache()  # Replace MPS cache clearing
 
 # Set up logging
 logging.basicConfig(
@@ -219,12 +218,8 @@ def main():
         y = torch.stack([data[i+1:i+BLOCK_SIZE+1] for i in ix])
         return x, y
 
-    # Initialize model
-    device = 'cpu'
-    if torch.backends.mps.is_available():
-        device = 'mps'
-    elif torch.cuda.is_available():
-        device = 'cuda'
+    # Modify device selection logic
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     device = torch.device(device)
     logging.info(f"Using device: {device}")
     
