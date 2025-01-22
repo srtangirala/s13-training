@@ -210,22 +210,20 @@ def main():
     train_data = data[:n]
     val_data = data[n:]
 
-    # Data loading
-    def get_batch(split):
-        data = train_data if split == 'train' else val_data
-        ix = torch.randint(len(data) - BLOCK_SIZE, (BATCH_SIZE,))
-        x = torch.stack([data[i:i+BLOCK_SIZE] for i in ix])
-        y = torch.stack([data[i+1:i+BLOCK_SIZE+1] for i in ix])
-        return x, y
+    # Add CUDA diagnostic information
+    logging.info(f"CUDA available: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        logging.info(f"CUDA device count: {torch.cuda.device_count()}")
+        logging.info(f"CUDA device name: {torch.cuda.get_device_name(0)}")
+        torch.cuda.set_device(0)  # Explicitly set to first CUDA device
 
-    # Modify device selection logic
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    device = torch.device(device)
+    # Modify device selection logic to be more explicit
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     logging.info(f"Using device: {device}")
     
     model = DecoderTransformer(vocab_size)
     model = model.to(device)
-    logging.info(f"Number of parameters: {sum(p.numel() for p in model.parameters())/1e6:.2f}M")
+    logging.info(f"Model device: {next(model.parameters()).device}")  # Verify model device
 
     # Initialize optimizer with weight decay
     optimizer = torch.optim.AdamW(
@@ -305,6 +303,14 @@ def main():
     torch.save(model.state_dict(), 'final_model.pt')
     print("Training completed!")
     print(f"Final best validation loss: {best_val_loss:.4f}")
+
+    # Ensure data is explicitly moved to GPU in get_batch
+    def get_batch(split):
+        data = train_data if split == 'train' else val_data
+        ix = torch.randint(len(data) - BLOCK_SIZE, (BATCH_SIZE,))
+        x = torch.stack([data[i:i+BLOCK_SIZE] for i in ix]).to(device)
+        y = torch.stack([data[i+1:i+BLOCK_SIZE+1] for i in ix]).to(device)
+        return x, y
 
 if __name__ == '__main__':
     main() 
