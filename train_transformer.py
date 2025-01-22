@@ -12,20 +12,29 @@ from tqdm import tqdm
 import logging
 import os
 import time
+from datetime import datetime
 
 # Remove MPS-specific settings and replace with CUDA empty cache
 import torch
 torch.cuda.empty_cache()  # Replace MPS cache clearing
 
-# Set up logging
+# Modify logging setup to include both file and markdown logging
+log_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+log_file = f'training_{log_timestamp}.log'
+md_file = f'training_{log_timestamp}.md'
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('training.log'),
+        logging.FileHandler(log_file),
         logging.StreamHandler()
     ]
 )
+
+def log_to_markdown(text, mode='a'):
+    with open(md_file, mode) as f:
+        f.write(text + '\n')
 
 # Adjust hyperparameters for balanced size/memory usage
 BATCH_SIZE = 16          # Reduced from 32
@@ -272,6 +281,20 @@ def main():
     # Initialize scheduler
     scheduler = WarmupCosineScheduler(optimizer, WARMUP_STEPS, MAX_ITERS)
 
+    # Log configuration to markdown
+    log_to_markdown('# Training Configuration\n', mode='w')
+    log_to_markdown('```')
+    log_to_markdown(f"Total parameters: {total_params:,}")
+    log_to_markdown(f"Trainable parameters: {trainable_params:,}")
+    log_to_markdown(f"Batch size: {BATCH_SIZE}")
+    log_to_markdown(f"Block size: {BLOCK_SIZE}")
+    log_to_markdown(f"Embedding dim: {N_EMBD}")
+    log_to_markdown(f"Heads: {N_HEAD}")
+    log_to_markdown(f"Layers: {N_LAYER}")
+    log_to_markdown(f"Max iterations: {MAX_ITERS}")
+    log_to_markdown('```\n')
+    log_to_markdown('# Training Progress\n')
+
     # Training loop
     best_val_loss = float('inf')
     for iter in range(MAX_ITERS):
@@ -289,9 +312,11 @@ def main():
         optimizer.step()
         scheduler.step()
 
-        # Print training progress
+        # Modify progress logging
         if iter % 10 == 0:
-            print(f"Iteration {iter}/{MAX_ITERS}: Training loss {loss.item():.4f}, LR {optimizer.param_groups[0]['lr']:.6f}")
+            progress = f"Iteration {iter}/{MAX_ITERS}: Training loss {loss.item():.4f}, LR {optimizer.param_groups[0]['lr']:.6f}"
+            print(progress)
+            log_to_markdown(progress)
 
         # Evaluation
         if iter % EVAL_INTERVAL == 0:
@@ -304,14 +329,14 @@ def main():
                     _, loss = model(xb, yb)
                     losses.append(loss.item())
             avg_loss = sum(losses) / len(losses)
-            print(f"\nEvaluation at step {iter}:")
-            print(f"- Train loss: {avg_loss:.4f}")
+            log_to_markdown(f"\n## Evaluation at step {iter}:")
+            log_to_markdown(f"- Train loss: {avg_loss:.4f}")
             
-            # Save best model
+            # Modify evaluation logging
             if avg_loss < best_val_loss:
                 best_val_loss = avg_loss
                 torch.save(model.state_dict(), 'best_model.pt')
-                print(f"- New best model saved! (val loss: {best_val_loss:.4f})\n")
+                log_to_markdown(f"- New best model saved! (val loss: {best_val_loss:.4f})\n")
             
             if avg_loss < 0.0999:
                 print("Target loss achieved! Stopping training.")
@@ -319,13 +344,15 @@ def main():
             
             model.train()
 
-        # Generate sample text every 1000 iterations
+        # Modify sample text generation logging
         if iter % 1000 == 0 and iter > 0:
-            print("\nGenerating sample text...")
+            log_to_markdown("\n### Generated Sample Text")
+            log_to_markdown("```")
             context = torch.zeros((1, 1), dtype=torch.long, device=device)
             generated_tokens = model.generate(context, max_new_tokens=100)[0].tolist()
-            print(decode(generated_tokens, itos))
-            print("\n" + "="*50 + "\n")
+            log_to_markdown(decode(generated_tokens, itos))
+            log_to_markdown("```\n")
+            log_to_markdown("---\n")
 
     # Save final model
     torch.save(model.state_dict(), 'final_model.pt')
