@@ -148,7 +148,13 @@ class DecoderTransformer(nn.Module):
         tok_emb = self.token_embedding_table(idx)
         pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device))
         x = tok_emb + pos_emb
-        x = self.blocks(x)
+        
+        # Use torch.utils.checkpoint for memory efficiency
+        if hasattr(self, 'gradient_checkpointing') and self.gradient_checkpointing:
+            x = torch.utils.checkpoint.checkpoint_sequential(self.blocks, 3, x)
+        else:
+            x = self.blocks(x)
+            
         x = self.ln_f(x)
         logits = self.lm_head(x)
 
@@ -173,7 +179,10 @@ class DecoderTransformer(nn.Module):
         return idx
 
     def gradient_checkpointing_enable(self):
-        self.blocks.register_hook(lambda grad: None)
+        self.gradient_checkpointing = True
+
+    def gradient_checkpointing_disable(self):
+        self.gradient_checkpointing = False
 
 # Add these functions back, but with actual implementation
 def encode(text, stoi):
