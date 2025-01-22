@@ -36,12 +36,12 @@ def log_to_markdown(text, mode='a'):
     with open(md_file, mode) as f:
         f.write(text + '\n')
 
-# Adjust hyperparameters for balanced size/memory usage
-BATCH_SIZE = 16          # Reduced from 32
-BLOCK_SIZE = 512        # Reduced from 1024
-N_EMBD = 768           # Keep this
-N_HEAD = 12            # Keep this
-N_LAYER = 12           # Keep this
+# Adjust hyperparameters to reach ~124M parameters while maintaining memory
+BATCH_SIZE = 16          # Keep same for memory
+BLOCK_SIZE = 512        # Keep same for memory
+N_EMBD = 1024          # Increase from 768 to 1024
+N_HEAD = 16            # Increase from 12 to 16
+N_LAYER = 12           # Keep same for memory
 LEARNING_RATE = 3e-4
 WARMUP_STEPS = 2000
 MAX_ITERS = 10000
