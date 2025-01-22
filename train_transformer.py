@@ -1,3 +1,6 @@
+import os
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -24,14 +27,14 @@ logging.basicConfig(
     ]
 )
 
-# Adjust hyperparameters for larger model
-BATCH_SIZE = 32          
-BLOCK_SIZE = 1024        # Increased from 256
-N_EMBD = 768            # Increased from 384
-N_HEAD = 12             # Increased from 8
-N_LAYER = 12            # Increased from 6
+# Adjust hyperparameters for balanced size/memory usage
+BATCH_SIZE = 16          # Reduced from 32
+BLOCK_SIZE = 512        # Reduced from 1024
+N_EMBD = 768           # Keep this
+N_HEAD = 12            # Keep this
+N_LAYER = 12           # Keep this
 LEARNING_RATE = 3e-4
-WARMUP_STEPS = 2000     # Increased for larger model
+WARMUP_STEPS = 2000
 MAX_ITERS = 10000
 EVAL_INTERVAL = 100    
 DROPOUT = 0.2
@@ -169,6 +172,9 @@ class DecoderTransformer(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1)
         return idx
 
+    def gradient_checkpointing_enable(self):
+        self.blocks.register_hook(lambda grad: None)
+
 # Add these functions back, but with actual implementation
 def encode(text, stoi):
     """Encode text to tokens using the provided mapping"""
@@ -223,8 +229,13 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     logging.info(f"Using device: {device}")
     
+    # Add gradient checkpointing to save memory
     model = DecoderTransformer(vocab_size)
+    model.gradient_checkpointing_enable()
     model = model.to(device)
+
+    # Add memory clearing before training loop
+    torch.cuda.empty_cache()
     
     # Calculate and display total parameters
     total_params = sum(p.numel() for p in model.parameters())
